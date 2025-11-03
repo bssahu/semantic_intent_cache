@@ -1,0 +1,105 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "semantic-intent-cache"
+version = "0.1.0"
+description = "Production-ready semantic cache for intent matching on Redis Stack"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+authors = [
+    { name = "Bhabani Sahoo", email = "bssahu@github.com" }
+]
+keywords = ["redis", "semantic", "cache", "intent", "vector", "search", "embeddings"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+]
+
+[project.urls]
+Homepage = "https://github.com/bssahu/semantic_intent_cache"
+Repository = "https://github.com/bssahu/semantic_intent_cache"
+Issues = "https://github.com/bssahu/semantic_intent_cache/issues"
+
+dependencies = [
+    "redis[hiredis]>=5.0.0",
+    "numpy>=1.24.0",
+    "sentence-transformers>=2.2.0",
+    "fastapi>=0.104.0",
+    "uvicorn[standard]>=0.24.0",
+    "pydantic>=2.5.0",
+    "pydantic-settings>=2.1.0",
+    "typer[all]>=0.9.0",
+    "httpx>=0.25.0",
+]
+
+[project.optional-dependencies]
+anthropic = ["boto3>=1.34.0", "anthropic>=0.40.0"]
+dev = [
+    "pytest>=7.4.0",
+    "pytest-asyncio>=0.21.0",
+    "pytest-cov>=4.1.0",
+    "httpx>=0.25.0",
+    "testcontainers>=4.0.0",
+    "testcontainers[redis]>=4.0.0",
+    "ruff>=0.1.0",
+    "black>=23.9.0",
+    "mypy>=1.6.0",
+    "types-redis>=4.5.0",
+]
+
+[project.scripts]
+semantic-intent-cache = "semantic_intent_cache.cli:app"
+
+[tool.hatchling.build.targets.wheel]
+packages = ["src/semantic_intent_cache"]
+
+[tool.black]
+line-length = 88
+target-version = ['py310']
+include = '\.pyi?$'
+
+[tool.ruff]
+line-length = 88
+target-version = "py310"
+select = [
+    "E",  # pycodestyle errors
+    "W",  # pycodestyle warnings
+    "F",  # pyflakes
+    "I",  # isort
+    "B",  # flake8-bugbear
+    "C4", # flake8-comprehensions
+    "UP", # pyupgrade
+]
+ignore = [
+    "E501",  # line too long (handled by black)
+]
+
+[tool.ruff.per-file-ignores]
+"__init__.py" = ["F401"]
+
+[tool.mypy]
+python_version = "3.10"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = true
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = "test_*.py"
+python_functions = "test_*"
+addopts = "-v --tb=short"
+asyncio_mode = "auto"
+markers = [
+    "integration: marks tests as integration tests (requires Docker)",
+    "unit: marks tests as unit tests",
+]
+

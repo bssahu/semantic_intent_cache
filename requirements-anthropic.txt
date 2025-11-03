@@ -1,0 +1,8 @@
+# Semantic Intent Cache - Anthropic/Bedrock Dependencies
+# Include production requirements
+-r requirements.txt
+
+# Anthropic/Bedrock support
+boto3>=1.34.0
+anthropic>=0.40.0
+
