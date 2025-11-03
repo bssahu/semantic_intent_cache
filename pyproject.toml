@@ -10,7 +10,7 @@ readme = "README.md"
 requires-python = ">=3.10"
 license = { text = "MIT" }
 authors = [
-    { name = "Bhabani Sahoo", email = "bssahu@github.com" }
+    { name = "Bhabani Sahu", email = "bssahu@github.com" }
 ]
 keywords = ["redis", "semantic", "cache", "intent", "vector", "search", "embeddings"]
 classifiers = [
