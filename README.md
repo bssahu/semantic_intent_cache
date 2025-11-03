@@ -481,5 +481,4 @@ MIT License - see [LICENSE](LICENSE) for details.
 
 ---
 
-**Made with ❤️ for production-ready semantic search**
 
