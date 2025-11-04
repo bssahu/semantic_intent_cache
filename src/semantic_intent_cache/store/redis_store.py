@@ -271,6 +271,39 @@ class RedisStore:
             logger.error(f"Error retrieving variants for intent {intent_id}: {e}")
             return []
 
+    def delete_intent(self, intent_id: str) -> int:
+        """
+        Delete all variants for a given intent.
+
+        Args:
+            intent_id: Intent identifier.
+
+        Returns:
+            Number of variants deleted.
+        """
+        try:
+            # Find all keys matching the pattern {key_prefix}{intent_id}:*
+            pattern = f"{self.key_prefix}{intent_id}:*"
+            keys = self.client.keys(pattern)
+
+            if not keys:
+                logger.info(f"No variants found for intent: {intent_id}")
+                return 0
+
+            # Delete all keys in a pipeline for efficiency
+            pipe = self.client.pipeline()
+            for key in keys:
+                pipe.delete(key)
+            
+            deleted = len(pipe.execute())
+            logger.info(f"Deleted {deleted} variants for intent: {intent_id}")
+            
+            return deleted
+
+        except Exception as e:
+            logger.error(f"Error deleting intent {intent_id}: {e}")
+            raise
+
     def health_check(self) -> bool:
         """
         Check Redis health.

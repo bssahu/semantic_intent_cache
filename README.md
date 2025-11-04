@@ -212,6 +212,10 @@ with SemanticIntentCache() as cache:
     print(f"Stored variants: {len(variants)}")
     for v in variants[:3]:
         print(f"  - {v['text']}")
+    
+    # Delete an intent and all its variants
+    deleted_count = cache.delete_intent("UPGRADE_PLAN")
+    print(f"Deleted {deleted_count} variants")
 ```
 
 ### CLI
@@ -235,6 +239,11 @@ semantic-intent-cache match \
 # List variants for an intent
 semantic-intent-cache variants --intent UPGRADE_PLAN
 
+# Delete an intent and all its variants
+semantic-intent-cache delete --intent UPGRADE_PLAN
+# Or skip confirmation prompt:
+semantic-intent-cache delete --intent UPGRADE_PLAN --confirm
+
 # Show config
 semantic-intent-cache info
 ```
@@ -248,16 +257,26 @@ Environment variables (see `.env.example`):
 REDIS_URL=redis://localhost:6379/0
 
 # Embeddings
-EMBED_MODEL_NAME=sentence-transformers/all-MiniLM-L6-v2
-VECTOR_DIM=384
+# Option 1: AWS Bedrock Titan (requires AWS credentials)
+EMBED_PROVIDER=titan
+EMBED_MODEL_NAME=amazon.titan-embed-text-v1
+VECTOR_DIM=1536  # Titan v1 embeddings are 1536 dimensions
+
+# Option 2: Sentence Transformers (local, no AWS required)
+# EMBED_PROVIDER=st_local
+# EMBED_MODEL_NAME=sentence-transformers/all-MiniLM-L6-v2
+# VECTOR_DIM=384  # all-MiniLM-L6-v2 embeddings are 384 dimensions
 
 # Variants
-VARIANT_PROVIDER=builtin  # or anthropic
+VARIANT_PROVIDER=anthropic  # or builtin
 
-# Anthropic/Bedrock (optional)
+# AWS/Bedrock Configuration (required for titan embeddings and anthropic variants)
 AWS_REGION=us-east-1
-ANTHROPIC_MODEL=anthropic.claude-3-7-sonnet-20250219-v1:0
-BEDROCK_PROFILE=default
+# Optional: AWS credentials (if not provided, uses default credential chain)
+# AWS_ACCESS_KEY_ID=your_access_key
+# AWS_SECRET_ACCESS_KEY=your_secret_key
+ANTHROPIC_MODEL=anthropic.claude-3-haiku-20240307-v1:0
+TITAN_EMBED_MODEL=amazon.titan-embed-text-v1
 
 # Index
 INDEX_NAME=sc:idx
@@ -266,7 +285,67 @@ EF_CONSTRUCTION=200
 M=16
 ```
 
+### Switching Embedding Providers
+
+You can easily switch between AWS Bedrock Titan and local Sentence Transformers:
+
+**For AWS Bedrock Titan (current default):**
+```bash
+EMBED_PROVIDER=titan
+EMBED_MODEL_NAME=amazon.titan-embed-text-v1
+VECTOR_DIM=1536
+```
+- ✅ Cloud-based, always up-to-date
+- ✅ No local model downloads
+- ⚠️ Requires AWS credentials and Bedrock access
+
+**For Sentence Transformers (local):**
+```bash
+EMBED_PROVIDER=st_local
+EMBED_MODEL_NAME=sentence-transformers/all-MiniLM-L6-v2
+VECTOR_DIM=384
+```
+- ✅ Works offline, no AWS required
+- ✅ Faster for local development
+- ⚠️ Requires downloading model on first use (~90MB)
+- ⚠️ Model is cached locally
+
+**Important:** When switching providers, you must:
+1. Update `EMBED_PROVIDER`, `EMBED_MODEL_NAME`, and `VECTOR_DIM`
+2. Drop and recreate the Redis index (dimensions must match)
+3. Re-ingest all documents
+
 ### Custom Providers
+
+You can customize embedding and variant providers programmatically:
+
+**Custom Embedding Providers:**
+
+```python
+from semantic_intent_cache import SemanticIntentCache
+from semantic_intent_cache.embeddings.titan_embedder import TitanEmbedder
+from semantic_intent_cache.embeddings.st_local import SentenceTransformerEmbedder
+
+# Use Titan embeddings with custom configuration
+cache = SemanticIntentCache(
+    embedder=TitanEmbedder(
+        model_id="amazon.titan-embed-text-v1",
+        aws_region="us-east-1",
+        vector_dim=1536
+    ),
+    vector_dim=1536
+)
+
+# Use Sentence Transformers with a different model
+cache = SemanticIntentCache(
+    embedder=SentenceTransformerEmbedder(
+        model_name="sentence-transformers/all-mpnet-base-v2"  # 768 dimensions
+    ),
+    vector_dim=768
+)
+```
+
+**Custom Variant Providers:**
 
 ```python
 from semantic_intent_cache import SemanticIntentCache
@@ -276,8 +355,9 @@ from semantic_intent_cache.variants.anthropic_variants import AnthropicVariantPr
 cache = SemanticIntentCache(
     variant_provider=AnthropicVariantProvider(
         aws_region="us-east-1",
-        model_id="anthropic.claude-3-7-sonnet-20250219-v1:0",
-        profile="default"
+        model_id="anthropic.claude-3-haiku-20240307-v1:0",
+        aws_access_key_id="your_key",  # Optional
+        aws_secret_access_key="your_secret"  # Optional
     )
 )
 ```
@@ -417,6 +497,44 @@ Search for best matching intent.
   },
   "alternates": []
 }
+```
+
+### `GET /cache/variants/{intent_id}`
+
+Retrieve all variant texts for an intent.
+
+**Response:**
+
+```json
+{
+  "intent_id": "UPGRADE_PLAN",
+  "variants": [
+    "How do I upgrade my plan?",
+    "How can I change my subscription?",
+    "What's the process for upgrading?"
+  ],
+  "count": 3
+}
+```
+
+### `DELETE /cache/intent/{intent_id}`
+
+Delete an intent and all its variants.
+
+**Response:**
+
+```json
+{
+  "intent_id": "UPGRADE_PLAN",
+  "deleted_count": 5,
+  "message": "Successfully deleted intent 'UPGRADE_PLAN' with 5 variant(s)"
+}
+```
+
+**Example:**
+
+```bash
+curl -X DELETE http://localhost:8080/cache/intent/UPGRADE_PLAN
 ```
 
 ### `GET /healthz`

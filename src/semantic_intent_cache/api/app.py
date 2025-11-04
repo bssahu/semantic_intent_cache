@@ -134,6 +134,14 @@ class VariantResponse(BaseModel):
     count: int = Field(..., description="Number of variants")
 
 
+class DeleteResponse(BaseModel):
+    """Response model for delete intent endpoint."""
+
+    intent_id: str = Field(..., description="Intent identifier")
+    deleted_count: int = Field(..., description="Number of variants deleted")
+    message: str = Field(..., description="Status message")
+
+
 # API endpoints
 @app.post("/cache/ingest", response_model=IngestResponse, tags=["Cache"])
 async def ingest_intent(request: IngestRequest) -> IngestResponse:
@@ -226,7 +234,39 @@ async def get_variants(intent_id: str) -> VariantResponse:
         )
     except Exception as e:
         logger.error(f"Error retrieving variants for intent {intent_id}: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=str(e)) from e
+
+
+@app.delete("/cache/intent/{intent_id}", response_model=DeleteResponse, tags=["Cache"])
+async def delete_intent(intent_id: str) -> DeleteResponse:
+    """
+    Delete an intent and all its variants.
+
+    Permanently removes all variants associated with the specified intent.
+    """
+    try:
+        sdk = get_sdk()
+        
+        # Check if intent exists
+        variants = sdk.get_variants(intent_id)
+        if not variants:
+            raise HTTPException(
+                status_code=404, detail=f"Intent '{intent_id}' not found"
+            )
+        
+        # Delete the intent
+        deleted_count = sdk.delete_intent(intent_id)
+        
+        return DeleteResponse(
+            intent_id=intent_id,
+            deleted_count=deleted_count,
+            message=f"Successfully deleted intent '{intent_id}' with {deleted_count} variant(s)",
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error deleting intent {intent_id}: {e}")
+        raise HTTPException(status_code=500, detail=str(e)) from e
 
 
 @app.get("/healthz", response_model=HealthResponse, tags=["Health"])

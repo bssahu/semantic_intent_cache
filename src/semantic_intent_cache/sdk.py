@@ -5,8 +5,10 @@ from typing import Any
 
 from semantic_intent_cache.embeddings.base import Embedder
 from semantic_intent_cache.embeddings.st_local import SentenceTransformerEmbedder
+from semantic_intent_cache.embeddings.titan_embedder import TitanEmbedder
 from semantic_intent_cache.store.redis_store import RedisStore
 from semantic_intent_cache.types import IngestResult, MatchResponse, MatchResult
+from semantic_intent_cache.variants.anthropic_variants import AnthropicVariantProvider
 from semantic_intent_cache.variants.base import VariantProvider
 from semantic_intent_cache.variants.builtin import BuiltinVariantProvider
 
@@ -61,13 +63,30 @@ class SemanticIntentCache:
 
         # Set up embedder
         if embedder is None:
-            self.embedder = SentenceTransformerEmbedder(model_name=settings.embed_model_name)
+            if settings.embed_provider == "titan":
+                self.embedder = TitanEmbedder(
+                    model_id=settings.titan_embed_model,
+                    aws_access_key_id=settings.aws_access_key_id,
+                    aws_secret_access_key=settings.aws_secret_access_key,
+                    aws_region=settings.aws_region,
+                    vector_dim=self.vector_dim,
+                )
+            else:  # st_local
+                self.embedder = SentenceTransformerEmbedder(model_name=settings.embed_model_name)
         else:
             self.embedder = embedder
 
         # Set up variant provider
         if variant_provider is None:
-            self.variant_provider = BuiltinVariantProvider()
+            if settings.variant_provider == "anthropic":
+                self.variant_provider = AnthropicVariantProvider(
+                    aws_region=settings.aws_region,
+                    model_id=settings.anthropic_model,
+                    aws_access_key_id=settings.aws_access_key_id,
+                    aws_secret_access_key=settings.aws_secret_access_key,
+                )
+            else:  # builtin
+                self.variant_provider = BuiltinVariantProvider()
         else:
             self.variant_provider = variant_provider
 
@@ -211,6 +230,21 @@ class SemanticIntentCache:
             List of variants with their text and metadata.
         """
         return self.store.get_variants_for_intent(intent_id)
+
+    def delete_intent(self, intent_id: str) -> int:
+        """
+        Delete an intent and all its variants.
+
+        Args:
+            intent_id: Intent identifier to delete.
+
+        Returns:
+            Number of variants deleted.
+        """
+        if not intent_id:
+            raise ValueError("intent_id is required")
+
+        return self.store.delete_intent(intent_id)
 
     def health_check(self) -> bool:
         """

@@ -161,6 +161,53 @@ def variants(
 
 
 @app.command()
+def delete(
+    intent: str = typer.Option(..., "--intent", "-i", help="Intent identifier to delete"),
+    redis_url: str = typer.Option(None, "--redis-url", "-r", help="Redis URL"),
+    confirm: bool = typer.Option(
+        False, "--confirm", "-y", help="Skip confirmation prompt"
+    ),
+) -> None:
+    """Delete an intent and all its variants."""
+    try:
+        from semantic_intent_cache.sdk import SemanticIntentCache
+
+        sdk = SemanticIntentCache(redis_url=redis_url)
+
+        # Check if intent exists
+        variant_list = sdk.get_variants(intent)
+        variant_count = len(variant_list)
+
+        if variant_count == 0:
+            print(f"✗ No variants found for intent '{intent}'")
+            sdk.close()
+            return
+
+        # Confirm deletion unless --confirm flag is used
+        if not confirm:
+            typer.confirm(
+                f"Delete intent '{intent}' with {variant_count} variant(s)? This cannot be undone.",
+                abort=True,
+            )
+
+        # Delete the intent
+        deleted_count = sdk.delete_intent(intent)
+
+        if deleted_count > 0:
+            print(f"✓ Deleted intent '{intent}' with {deleted_count} variant(s)")
+        else:
+            print(f"✗ No variants deleted for intent '{intent}'")
+
+        sdk.close()
+    except typer.Abort:
+        print("Deletion cancelled")
+        sys.exit(0)
+    except Exception as e:
+        logger.error(f"Error deleting intent: {e}")
+        sys.exit(1)
+
+
+@app.command()
 def info() -> None:
     """Display configuration information."""
     print(f"Redis URL: {settings.redis_url}")

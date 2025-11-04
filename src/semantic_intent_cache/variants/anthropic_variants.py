@@ -1,7 +1,9 @@
 """Anthropic/Bedrock variant provider (optional)."""
 
-import json
+import asyncio
 import logging
+
+from semantic_intent_cache.embeddings.bedrock_client import BedrockClient
 
 logger = logging.getLogger(__name__)
 
@@ -18,7 +20,9 @@ class AnthropicVariantProvider:
         self,
         aws_region: str = "us-east-1",
         model_id: str = "anthropic.claude-3-7-sonnet-20250219-v1:0",
-        profile: str = "default",
+        aws_access_key_id: str | None = None,
+        aws_secret_access_key: str | None = None,
+        profile: str | None = None,
     ):
         """
         Initialize the Anthropic variant provider.
@@ -26,25 +30,37 @@ class AnthropicVariantProvider:
         Args:
             aws_region: AWS region for Bedrock.
             model_id: Bedrock model ID.
-            profile: AWS profile name.
+            aws_access_key_id: AWS access key ID (optional, uses credentials chain if not provided).
+            aws_secret_access_key: AWS secret access key (optional, uses credentials chain if not provided).
+            profile: AWS profile name (optional, deprecated - use credentials or default chain).
         """
-        try:
-            import boto3
-        except ImportError as e:
-            raise ImportError(
-                "boto3 not installed. Install with: pip install semantic-intent-cache[anthropic]"
-            ) from e
-
-        self.aws_region = aws_region
         self.model_id = model_id
-        self.profile = profile
 
         # Initialize Bedrock client
         try:
-            session = boto3.Session(profile_name=profile)
-            self.client = session.client("bedrock-runtime", region_name=aws_region)
+            # Use explicit credentials if provided, otherwise use credentials chain
+            if profile:
+                logger.warning("profile parameter is deprecated, use aws_access_key_id/aws_secret_access_key or default credentials chain")
+                # Fallback: try to use boto3 session for profile
+                try:
+                    import boto3
+                    session = boto3.Session(profile_name=profile)
+                    # Extract credentials from session
+                    credentials = session.get_credentials()
+                    if credentials:
+                        aws_access_key_id = credentials.access_key
+                        aws_secret_access_key = credentials.secret_key
+                except Exception as e:
+                    logger.warning(f"Could not use profile {profile}: {e}")
+
+            self.bedrock_client = BedrockClient(
+                aws_access_key_id=aws_access_key_id,
+                aws_secret_access_key=aws_secret_access_key,
+                aws_region=aws_region,
+            )
+            logger.info(f"Initialized Anthropic variant provider with model: {model_id}")
         except Exception as e:
-            logger.error(f"Failed to initialize Bedrock client: {e}")
+            logger.error(f"Failed to initialize Anthropic variant provider: {e}")
             raise
 
     def generate(self, question: str, n: int) -> list[str]:
@@ -65,58 +81,54 @@ Original question: {question}
 Paraphrases:"""
 
         try:
-            # Prepare request body for Claude
-            body = {
-                "anthropic_version": "bedrock-2023-05-31",
-                "max_tokens": 1000,
-                "messages": [
-                    {
-                        "role": "user",
-                        "content": prompt,
-                    }
-                ],
-            }
-
-            # Invoke Bedrock
-            response = self.client.invoke_model(
-                modelId=self.model_id,
-                body=json.dumps(body).encode("utf-8"),
-                contentType="application/json",
-                accept="application/json",
+            # Invoke Bedrock using async method (run in sync context)
+            # Use asyncio.run() to execute the async call
+            content = asyncio.run(
+                self.bedrock_client.invoke_model_async(
+                    model_id=self.model_id,
+                    prompt=prompt,
+                    max_tokens=1000,
+                    agent_name="AnthropicVariantProvider",
+                    temperature=0.7,
+                    top_p=0.9,
+                )
             )
 
-            # Parse response
-            try:
-                response_body = json.loads(response["body"].read())
-
-                # Extract text from Claude response
-                content = ""
-                for message in response_body.get("content", []):
-                    if message.get("type") == "text":
-                        content = message.get("text", "")
-                        break
-
-                # Parse variants
-                variants = [
-                    line.strip()
-                    for line in content.split("\n")
-                    if line.strip()
-                    and not line.strip().startswith(("1.", "2.", "3.", "-", "*"))
-                ]
-
-                # Always include original
-                if question not in variants:
-                    variants.insert(0, question)
-
-                # Limit to requested number
-                return variants[:n]
-
-            except (json.JSONDecodeError, KeyError) as e:
-                logger.error(f"Error parsing Bedrock response: {e}")
+            if not content:
+                logger.warning(f"No content received from Bedrock response")
                 return [question]
 
+            logger.debug(f"Extracted content from Claude: {content[:200]}...")
+
+            # Parse variants - split by newlines and filter empty lines and list markers
+            variants = []
+            for line in content.split("\n"):
+                line = line.strip()
+                if line and not line.strip().startswith(("1.", "2.", "3.", "4.", "5.", "-", "*", "•")):
+                    # Clean up any remaining prefixes
+                    line = line.lstrip("0123456789. -•*").strip()
+                    if line:
+                        variants.append(line)
+
+            logger.info(f"Generated {len(variants)} variants from Claude response")
+
+            # Always include original
+            if question not in variants:
+                variants.insert(0, question)
+
+            # Limit to requested number
+            result = variants[:n]
+            logger.info(f"Returning {len(result)} variants (requested {n})")
+            return result
+
         except Exception as e:
-            logger.error(f"Error generating variants with Bedrock: {e}")
+            error_msg = str(e)
+            logger.error(
+                f"Error generating variants with Bedrock: {error_msg}\n"
+                f"Question: {question}, Requested variants: {n}\n"
+                f"Falling back to original question only.",
+                exc_info=True,
+            )
             # Fallback to original
             return [question]
 
