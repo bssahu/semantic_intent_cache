@@ -4,7 +4,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![GitHub](https://img.shields.io/github/license/bssahu/semantic_intent_cache)](https://github.com/bssahu/semantic_intent_cache)
 
-**Production-ready Python SDK for semantic intent matching** built on Redis Stack (RediSearch + HNSW vectors). Store questions with intent IDs, auto-generate semantic variants, and retrieve best matches using cosine similarity search.
+** Python SDK for semantic intent matching** built on Redis Stack (RediSearch + HNSW vectors). Store questions with intent IDs, auto-generate semantic variants, and retrieve best matches using cosine similarity search.
 
 > **Built with**: FastAPI | Redis Stack | Sentence Transformers | Anthropic Claude 3.7
 
