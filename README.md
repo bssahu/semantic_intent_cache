@@ -15,7 +15,7 @@ Semantic Intent Cache enables **intent classification** for conversational syste
 - **Fast retrieval**: Sub-millisecond vector search with Redis Stack HNSW
 - **High recall**: Auto-generate semantic variants to capture paraphrases
 - **Zero training**: Works out-of-the-box with pre-trained embeddings
-- **Production-ready**: Comprehensive tests, Docker support, FastAPI service
+- **Ready to host**: Comprehensive tests, Docker support, FastAPI service
 - **Pluggable**: Swap embedders (local SentenceTransformers) and variant providers (builtin or Anthropic/Bedrock)
 
 ### Use Cases
