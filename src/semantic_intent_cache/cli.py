@@ -57,6 +57,7 @@ def ingest(
         help="Number of variants to auto-generate",
     ),
     redis_url: str = typer.Option(None, "--redis-url", "-r", help="Redis URL"),
+    tenant: str = typer.Option(None, "--tenant", "-t", help="Optional tenant identifier"),
 ) -> None:
     """
     Ingest an intent with variants.
@@ -74,11 +75,14 @@ def ingest(
             intent_id=intent,
             question=question,
             auto_variant_count=auto_variants,
+            tenant=tenant,
         )
 
         print(f"✓ Ingested intent: {result['intent_id']}")
         print(f"  Stored variants: {result['stored_variants']}")
         print(f"  Total generated: {result['total_generated']}")
+        if result["tenant"]:
+            print(f"  Tenant: {result['tenant']}")
 
         sdk.close()
     except Exception as e:

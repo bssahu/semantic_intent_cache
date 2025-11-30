@@ -1,7 +1,7 @@
 """Anthropic/Bedrock variant provider (optional)."""
 
-import asyncio
 import logging
+import json
 
 from semantic_intent_cache.embeddings.bedrock_client import BedrockClient
 
@@ -81,29 +81,58 @@ Original question: {question}
 Paraphrases:"""
 
         try:
-            # Invoke Bedrock using async method (run in sync context)
-            # Use asyncio.run() to execute the async call
-            content = asyncio.run(
-                self.bedrock_client.invoke_model_async(
-                    model_id=self.model_id,
-                    prompt=prompt,
-                    max_tokens=1000,
-                    agent_name="AnthropicVariantProvider",
-                    temperature=0.7,
-                    top_p=0.9,
-                )
+            request_body = json.dumps(
+                {
+                    "messages": [
+                        {
+                            "role": "user",
+                            "content": prompt,
+                        }
+                    ],
+                    "max_tokens": 1000,
+                    "temperature": 0.7,
+                    "top_p": 0.9,
+                    "anthropic_version": "bedrock-2023-05-31",
+                }
             )
 
-            if not content:
-                logger.warning(f"No content received from Bedrock response")
+            response = self.bedrock_client.invoke_model(
+                model_id=self.model_id,
+                body=request_body,
+                max_tokens=1000,
+                agent_name="AnthropicVariantProvider",
+            )
+
+            raw_body = response.get("body")
+            if raw_body is None:
+                logger.warning("No body in Bedrock response")
                 return [question]
 
+            if hasattr(raw_body, "read"):
+                raw_body = raw_body.read()
+
+            if isinstance(raw_body, bytes):
+                raw_body = raw_body.decode("utf-8")
+
+            response_json = json.loads(raw_body)
+            content_blocks = response_json.get("content", [])
+
+            if not content_blocks:
+                logger.warning("No content received from Bedrock response")
+                return [question]
+
+            content = content_blocks[0].get("text", "") if isinstance(content_blocks, list) else ""
             logger.debug(f"Extracted content from Claude: {content[:200]}...")
 
             # Parse variants - split by newlines and filter empty lines and list markers
             variants = []
             for line in content.split("\n"):
                 line = line.strip()
+                lower_line = line.lower()
+
+                if lower_line.startswith(("here are", "paraphrases", "original question")):
+                    continue
+
                 if line and not line.strip().startswith(("1.", "2.", "3.", "4.", "5.", "-", "*", "•")):
                     # Clean up any remaining prefixes
                     line = line.lstrip("0123456789. -•*").strip()

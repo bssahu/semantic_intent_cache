@@ -57,12 +57,17 @@ class TestSemanticIntentCache:
                 intent_id="UPGRADE_PLAN",
                 question="How do I upgrade my plan?",
                 auto_variant_count=12,
+                tenant="TENANT_A",
             )
 
             # Verify
             assert result["intent_id"] == "UPGRADE_PLAN"
             assert result["stored_variants"] == 12
+            assert result["tenant"] == "TENANT_A"
             mock_store.upsert_variants.assert_called_once()
+            _, kwargs = mock_store.upsert_variants.call_args
+            assert kwargs["tenant"] == "TENANT_A"
+            mock_store.ensure_index.assert_called()
 
     def test_ingest_empty_question(self):
         """Test ingest with empty question raises error."""
@@ -189,4 +194,16 @@ class TestSemanticIntentCache:
             cache.close()
 
             mock_store.close.assert_called_once()
+
+    def test_list_intents(self):
+        """Test listing intents delegates to store."""
+        with patch("semantic_intent_cache.sdk.RedisStore") as mock_store_class:
+            mock_store = MagicMock()
+            mock_store.list_intents.return_value = ["A", "B"]
+            mock_store_class.return_value = mock_store
+
+            cache = SemanticIntentCache()
+
+            assert cache.list_intents() == ["A", "B"]
+            mock_store.list_intents.assert_called_once()
 

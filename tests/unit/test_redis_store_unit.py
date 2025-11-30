@@ -33,7 +33,7 @@ class TestRedisStore:
             variants = ["variant1", "variant2", "variant3"]
             embeddings = np.random.randn(3, 384).astype(np.float32)
 
-            store.upsert_variants("TEST_INTENT", variants, embeddings)
+            store.upsert_variants("TEST_INTENT", variants, embeddings, tenant=None)
 
             # Verify pipeline was created and executed
             mock_client.pipeline.assert_called_once()
@@ -55,7 +55,7 @@ class TestRedisStore:
             embeddings = np.random.randn(3, 384).astype(np.float32)
 
             with pytest.raises(ValueError, match="Mismatch"):
-                store.upsert_variants("TEST_INTENT", variants, embeddings)
+                store.upsert_variants("TEST_INTENT", variants, embeddings, tenant=None)
 
     def test_knn_search_shape(self):
         """Test knn_search with correct embedding shape."""
@@ -152,4 +152,48 @@ class TestRedisStore:
             store.close()
 
             mock_client.close.assert_called_once()
+
+    def test_upsert_variants_with_tenant(self):
+        """Ensure tenant metadata is stored when provided."""
+        import semantic_intent_cache.store.redis_store as redis_store_module
+
+        with patch.object(redis_store_module.redis, "from_url") as mock_from_url:
+            mock_client = MagicMock()
+            mock_pipe = MagicMock()
+            mock_client.pipeline.return_value = mock_pipe
+            mock_from_url.return_value = mock_client
+
+            store = redis_store_module.RedisStore()
+            store.client = mock_client
+
+            variants = ["variant1"]
+            embeddings = np.random.randn(1, 384).astype(np.float32)
+
+            store.upsert_variants("TEST_INTENT", variants, embeddings, tenant="TENANT_A")
+
+            mock_pipe.hset.assert_called_once()
+            _, kwargs = mock_pipe.hset.call_args
+            mapping = kwargs["mapping"]
+            assert mapping["tenant"] == "TENANT_A"
+    def test_list_intents(self):
+        """Test listing unique intents from stored keys."""
+        import semantic_intent_cache.store.redis_store as redis_store_module
+
+        with patch.object(redis_store_module.redis, "from_url") as mock_from_url:
+            mock_client = MagicMock()
+            mock_client.ping.return_value = True
+            mock_client.scan_iter.return_value = [
+                b"sc:doc:INTENT_A:0",
+                b"sc:doc:INTENT_B:1",
+                b"sc:doc:INTENT_A:1",
+                "sc:doc:INTENT_C:0",
+            ]
+            mock_from_url.return_value = mock_client
+
+            store = redis_store_module.RedisStore()
+            store.client = mock_client
+
+            intents = store.list_intents()
+
+            assert intents == ["INTENT_A", "INTENT_B", "INTENT_C"]
 

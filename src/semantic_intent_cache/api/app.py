@@ -65,6 +65,11 @@ class IngestRequest(BaseModel):
 
     intent_id: str = Field(..., description="Intent identifier")
     question: str = Field(..., description="Original question")
+    tenant: str | None = Field(
+        default=None,
+        description="Optional tenant identifier used for multi-tenant filtering",
+        max_length=128,
+    )
     auto_variant_count: int = Field(
         default=12,
         ge=1,
@@ -83,6 +88,10 @@ class IngestResponse(BaseModel):
     status: str = Field(..., description="Status")
     intent_id: str = Field(..., description="Intent identifier")
     stored_variants: int = Field(..., description="Number of variants stored")
+    tenant: str | None = Field(
+        default=None,
+        description="Tenant identifier stored with the intent (if provided)",
+    )
 
 
 class MatchRequest(BaseModel):
@@ -157,12 +166,14 @@ async def ingest_intent(request: IngestRequest) -> IngestResponse:
             question=request.question,
             auto_variant_count=request.auto_variant_count,
             variants=request.variants,
+            tenant=request.tenant,
         )
 
         return IngestResponse(
             status="ok",
             intent_id=result["intent_id"],
             stored_variants=result["stored_variants"],
+            tenant=result.get("tenant"),
         )
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))

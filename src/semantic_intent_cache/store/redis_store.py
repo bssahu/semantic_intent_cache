@@ -5,7 +5,7 @@ from typing import Any
 
 import numpy as np
 import redis
-from redis.commands.search.field import TextField, VectorField
+from redis.commands.search.field import TagField, TextField, VectorField
 from redis.commands.search.index_definition import IndexDefinition, IndexType
 
 logger = logging.getLogger(__name__)
@@ -78,6 +78,7 @@ class RedisStore:
         schema = (
             TextField("intent", sortable=True, as_name="intent"),
             TextField("text", sortable=False, as_name="text"),
+            TagField("tenant", as_name="tenant", separator=","),
             VectorField(
                 "embedding",
                 algorithm="HNSW",
@@ -111,6 +112,7 @@ class RedisStore:
         intent_id: str,
         variants: list[str],
         embeddings: np.ndarray,
+        tenant: str | None = None,
     ) -> int:
         """
         Upsert variants into Redis.
@@ -142,6 +144,9 @@ class RedisStore:
                 "text": variant,
                 "embedding": embedding_bytes,
             }
+
+            if tenant:
+                doc["tenant"] = tenant
 
             pipe.hset(key, mapping=doc)
             stored += 1
@@ -177,10 +182,12 @@ class RedisStore:
         # Build filter
         query_filter = filter_expr
         if tenant:
+            escaped_tenant = tenant.replace('"', '\\"')
+            tenant_clause = f'@tenant:{{"{escaped_tenant}"}}'
             if query_filter:
-                query_filter = f"(@tenant:{{{tenant}}}) ({query_filter})"
+                query_filter = f"({tenant_clause}) ({query_filter})"
             else:
-                query_filter = f"@tenant:{{{tenant}}}"
+                query_filter = tenant_clause
 
         # Convert embedding to bytes
         query_bytes = query_embedding.astype(np.float32).tobytes()
@@ -189,9 +196,9 @@ class RedisStore:
         try:
             ft = self.client.ft(self.index_name)
 
-            # Set dialect to 2 for vector support
+            # Set dialect to 2 for vector support (use core client for Redis 8+)
             try:
-                ft.config_set("DEFAULT_DIALECT", "2")
+                self.client.config_set("DEFAULT_DIALECT", "2")
             except Exception:
                 pass  # Already set or not needed
 
@@ -262,6 +269,7 @@ class RedisStore:
                 variants.append({
                     "text": getattr(doc, "text", ""),
                     "intent_id": getattr(doc, "intent", ""),
+                    "tenant": getattr(doc, "tenant", None),
                     "id": getattr(doc, "id", ""),
                 })
 
@@ -316,6 +324,37 @@ class RedisStore:
             return True
         except Exception:
             return False
+
+    def list_intents(self) -> list[str]:
+        """
+        List all distinct intent identifiers stored in Redis.
+
+        Returns:
+            Sorted list of unique intent IDs.
+        """
+        try:
+            pattern = f"{self.key_prefix}*"
+            intents: set[str] = set()
+
+            for key in self.client.scan_iter(match=pattern):
+                if isinstance(key, bytes):
+                    key_str = key.decode("utf-8", errors="ignore")
+                else:
+                    key_str = str(key)
+
+                if not key_str.startswith(self.key_prefix):
+                    continue
+
+                key_suffix = key_str[len(self.key_prefix) :]
+                intent_id = key_suffix.split(":", 1)[0]
+
+                if intent_id:
+                    intents.add(intent_id)
+
+            return sorted(intents)
+        except Exception as e:
+            logger.error(f"Error listing intents: {e}")
+            return []
 
     def close(self) -> None:
         """Close the Redis connection."""

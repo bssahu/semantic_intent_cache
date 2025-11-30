@@ -54,6 +54,7 @@ class TestAPIIntegration:
             "intent_id": "UPGRADE_PLAN",
             "question": "How do I upgrade my plan?",
             "auto_variant_count": 6,
+            "tenant": "acme-support",
         }
 
         response = await api_client.post("/cache/ingest", json=ingest_request)
@@ -62,12 +63,14 @@ class TestAPIIntegration:
         assert data["status"] == "ok"
         assert data["intent_id"] == "UPGRADE_PLAN"
         assert data["stored_variants"] == 6
+        assert data["tenant"] == "acme-support"
 
         # Match a similar query
         match_request = {
             "query": "I want to move to a higher tier",
             "top_k": 5,
             "min_similarity": 0.6,
+            "tenant": "acme-support",
         }
 
         response = await api_client.post("/cache/match", json=match_request)
@@ -76,6 +79,18 @@ class TestAPIIntegration:
         assert data["match"] is not None
         assert data["match"]["intent_id"] == "UPGRADE_PLAN"
         assert data["match"]["similarity"] >= 0.6
+
+        # Same query scoped to a different tenant should not match
+        other_tenant_request = {
+            "query": "I want to move to a higher tier",
+            "top_k": 5,
+            "min_similarity": 0.6,
+            "tenant": "another-tenant",
+        }
+
+        response = await api_client.post("/cache/match", json=other_tenant_request)
+        assert response.status_code == 200
+        assert response.json()["match"] is None
 
     @pytest.mark.asyncio
     async def test_match_no_results(self, api_client):

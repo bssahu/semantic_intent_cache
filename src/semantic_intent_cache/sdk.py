@@ -102,6 +102,7 @@ class SemanticIntentCache:
         question: str,
         auto_variant_count: int = 10,
         variants: list[str] | None = None,
+        tenant: str | None = None,
     ) -> IngestResult:
         """
         Ingest an intent with variants.
@@ -117,6 +118,9 @@ class SemanticIntentCache:
         """
         if not intent_id or not question:
             raise ValueError("intent_id and question are required")
+
+        # Ensure index exists before ingest in case Redis was flushed
+        self.ensure_index()
 
         # Collect all variants
         all_variants = set()
@@ -145,12 +149,18 @@ class SemanticIntentCache:
         embeddings = self.embedder.encode(variant_list)
 
         # Store in Redis
-        stored = self.store.upsert_variants(intent_id, variant_list, embeddings)
+        stored = self.store.upsert_variants(
+            intent_id,
+            variant_list,
+            embeddings,
+            tenant=tenant,
+        )
 
         return {
             "intent_id": intent_id,
             "stored_variants": stored,
             "total_generated": total_generated,
+            "tenant": tenant,
         }
 
     def match(
@@ -258,6 +268,15 @@ class SemanticIntentCache:
     def close(self) -> None:
         """Close the cache and clean up resources."""
         self.store.close()
+
+    def list_intents(self) -> list[str]:
+        """
+        List all intent identifiers stored in the cache.
+
+        Returns:
+            Sorted list of unique intent IDs.
+        """
+        return self.store.list_intents()
 
     def __repr__(self) -> str:
         """String representation."""

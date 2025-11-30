@@ -18,6 +18,7 @@ class IngestResult(TypedDict):
     intent_id: str
     stored_variants: int
     total_generated: int
+    tenant: str | None
 
 
 class MatchResponse(TypedDict):

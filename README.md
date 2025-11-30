@@ -35,16 +35,16 @@ Semantic Intent Cache enables **intent classification** for conversational syste
                          │
                          ▼
 ┌─────────────────────────────────────────────────────────────────┐
-│                    SemanticIntentCache                           │
-│  ┌────────────────────┐         ┌──────────────────────────┐   │
-│  │  VariantProvider   │────────▶│  Generate 10 variants     │   │
-│  │ (builtin/Anthropic)│         │  - "How do I upgrade?"    │   │
-│  └────────────────────┘         │  - "I want to upgrade?"   │   │
-│                                  │  - "Steps to upgrade?"    │   │
-│  ┌────────────────────┐         └──────────────────────────┘   │
-│  │    Embedder        │         ┌──────────────────────────┐   │
-│  │ (SentenceTransform)│────────▶│  Encode to 384-D vectors │   │
-│  └────────────────────┘         └──────────────────────────┘   │
+│                    SemanticIntentCache                          │
+│  ┌────────────────────┐         ┌──────────────────────────┐    │
+│  │  VariantProvider   │────────▶│  Generate 10 variants    │    │
+│  │ (builtin/Anthropic)│         │  - "How do I upgrade?"   │    │
+│  └────────────────────┘         │  - "I want to upgrade?"  │    │
+│                                 │  - "Steps to upgrade?"   │    │
+│  ┌────────────────────┐         └──────────────────────────┘    │
+│  │    Embedder        │         ┌──────────────────────────┐    │
+│  │ (SentenceTransform)│────────▶│  Encode to 384-D vectors │    │
+│  └────────────────────┘         └──────────────────────────┘    │
 └────────────────────────┬────────────────────────────────────────┘
                          │
                          ▼
@@ -310,6 +310,64 @@ VECTOR_DIM=384
 - ⚠️ Requires downloading model on first use (~90MB)
 - ⚠️ Model is cached locally
 
+#### Better Open-Source Embedding Models (Higher Dimensions)
+
+For better semantic similarity performance, consider these higher-dimensional models:
+
+**Recommended Models (sorted by quality/speed tradeoff):**
+
+1. **`sentence-transformers/all-mpnet-base-v2`** (768 dims) ⭐ **Recommended**
+   ```bash
+   EMBED_PROVIDER=st_local
+   EMBED_MODEL_NAME=sentence-transformers/all-mpnet-base-v2
+   VECTOR_DIM=768
+   ```
+   - Best balance of quality and speed
+   - Excellent semantic similarity performance
+   - ~420MB download
+
+2. **`BAAI/bge-large-en-v1.5`** (1024 dims) ⭐ **Best Quality**
+   ```bash
+   EMBED_PROVIDER=st_local
+   EMBED_MODEL_NAME=BAAI/bge-large-en-v1.5
+   VECTOR_DIM=1024
+   ```
+   - State-of-the-art performance
+   - Top performer on MTEB benchmark
+   - ~1.3GB download, slower inference
+
+3. **`intfloat/e5-large-v2`** (1024 dims)
+   ```bash
+   EMBED_PROVIDER=st_local
+   EMBED_MODEL_NAME=intfloat/e5-large-v2
+   VECTOR_DIM=1024
+   ```
+   - Excellent quality, competitive with bge-large
+   - ~1.3GB download
+
+4. **`sentence-transformers/all-MiniLM-L12-v2`** (384 dims)
+   ```bash
+   EMBED_PROVIDER=st_local
+   EMBED_MODEL_NAME=sentence-transformers/all-MiniLM-L12-v2
+   VECTOR_DIM=384
+   ```
+   - Better than L6-v2, same dimension
+   - Good upgrade path without changing Redis schema
+
+5. **`paraphrase-multilingual-mpnet-base-v2`** (768 dims)
+   ```bash
+   EMBED_PROVIDER=st_local
+   EMBED_MODEL_NAME=sentence-transformers/paraphrase-multilingual-mpnet-base-v2
+   VECTOR_DIM=768
+   ```
+   - Multilingual support (50+ languages)
+   - Good for international use cases
+
+**Performance Comparison:**
+- **384 dims (all-MiniLM-L6-v2)**: Fastest, smallest, lowest quality
+- **768 dims (all-mpnet-base-v2)**: Balanced - recommended default
+- **1024 dims (bge-large/e5-large)**: Best quality, slower, larger models
+
 **Important:** When switching providers, you must:
 1. Update `EMBED_PROVIDER`, `EMBED_MODEL_NAME`, and `VECTOR_DIM`
 2. Drop and recreate the Redis index (dimensions must match)
@@ -336,12 +394,20 @@ cache = SemanticIntentCache(
     vector_dim=1536
 )
 
-# Use Sentence Transformers with a different model
+# Use Sentence Transformers with a higher-quality model (768 dimensions)
 cache = SemanticIntentCache(
     embedder=SentenceTransformerEmbedder(
-        model_name="sentence-transformers/all-mpnet-base-v2"  # 768 dimensions
+        model_name="sentence-transformers/all-mpnet-base-v2"
     ),
     vector_dim=768
+)
+
+# Or use state-of-the-art BGE model (1024 dimensions)
+cache = SemanticIntentCache(
+    embedder=SentenceTransformerEmbedder(
+        model_name="BAAI/bge-large-en-v1.5"
+    ),
+    vector_dim=1024
 )
 ```
 

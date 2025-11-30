@@ -2,11 +2,18 @@
 
 from typing import Literal
 
+from pydantic import ConfigDict
 from pydantic_settings import BaseSettings
 
 
 class Settings(BaseSettings):
     """Application settings."""
+
+    model_config = ConfigDict(
+        env_file=".env",
+        env_file_encoding="utf-8",
+        case_sensitive=False,
+    )
 
     # Redis configuration
     redis_url: str = "redis://localhost:6379/0"
@@ -30,7 +37,7 @@ class Settings(BaseSettings):
     aws_access_key_id: str | None = None
     aws_secret_access_key: str | None = None
     bedrock_profile: str | None = None  # Optional, uses credentials chain if not set
-    
+
     # Anthropic/Bedrock model configuration
     # Can be either a model ID or an inference profile ARN
     # Model ID format: anthropic.claude-3-haiku-20240307-v1:0
@@ -49,13 +56,6 @@ class Settings(BaseSettings):
     key_prefix: str = "sc:doc:"
     ef_construction: int = 200
     m: int = 16
-
-    class Config:
-        """Pydantic config."""
-
-        env_file = ".env"
-        env_file_encoding = "utf-8"
-        case_sensitive = False
 
 
 # Global settings instance
